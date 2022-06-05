@@ -26,10 +26,6 @@ class FlashCards {
         return s
     }
 
-    init {
-        run()
-    }
-
     private fun addCard() {
         println("The card:")
         val term = readln()
@@ -59,10 +55,15 @@ class FlashCards {
         } else println("Can't remove \"$term\": there is no such card.")
     }
 
-    private fun import() {
-        println("File name:")
-        val file = File(readln())
+    private fun getFile(filename: String): File {
+        return File(filename.ifEmpty {
+            println("File name:")
+            readln()
+        })
+    }
 
+    fun import(filename: String = "") {
+        val file = getFile(filename)
         if (!file.exists()) {
             println("File not found.")
             return
@@ -70,29 +71,28 @@ class FlashCards {
 
         val cards = file.readLines()
         cards.forEach {
-            val (term, definition, mistakes) = it.split('=')
+            val (term, definition, errors) = it.split('=')
 
             if (term in deck) {
                 deck.remove(deck.find { it.term == term })
             }
 
             deck += Card(term, definition).apply {
-                this.errors = mistakes.toInt()
+                this.errors = errors.toInt()
             }
         }
         println("${cards.size} cards have been loaded.")
     }
 
-    private fun export() {
-        println("File name:")
-        val filename = readln()
+    fun export(filename: String = "") {
+        val file = getFile(filename)
 
         var output = ""
         deck.forEach {
             output += it.term + "=" + it.def + "=" + it.errors + "\n"
         }
 
-        File(filename).writeText(output)
+        file.writeText(output)
         println("${deck.size} cards have been saved.")
     }
 
@@ -105,12 +105,14 @@ class FlashCards {
             val answer = readln()
 
             if (card.def != answer) card.errors++
-            println(when {
-                card.def == answer -> "Correct!"
-                deck has answer -> "Wrong. The right answer is \"${card.def}\", but your " +
-                        "definition is correct for \"${deck.find { it.def == answer }?.term}\"."
-                else -> "Wrong. The right answer is \"${card.def}\"."
-            })
+            println(
+                when {
+                    card.def == answer -> "Correct!"
+                    deck has answer -> "Wrong. The right answer is \"${card.def}\", but your " +
+                            "definition is correct for \"${deck.find { it.def == answer }?.term}\"."
+                    else -> "Wrong. The right answer is \"${card.def}\"."
+                }
+            )
         }
     }
 
@@ -124,17 +126,19 @@ class FlashCards {
 
     private fun showHardestCard() {
         // get the set of cards with the largest amount of errors
-        val terms = deck.groupBy { it.errors }.maxByOrNull { it.key }?.value
+        val cards = deck.groupBy { it.errors }.maxByOrNull { it.key }?.value
 
-        // if the error amount is 0, or we didn't find anything, return an empty list
+            // if the error amount is 0, or we didn't find anything, return an empty list
             ?.let { if (it[0].errors > 0) it else null } ?: listOf()
 
-        println(when {
-            terms.isEmpty() -> "There are no cards with errors."
-            terms.size == 1 -> "The hardest card is \"${terms[0].term}\". You have ${terms[0].errors} errors answering it."
-            else -> "The hardest cards are \"" + terms.joinToString("\", \"") +
-                    "\". You have ${terms[0].errors} errors answering them"
-        })
+        println(
+            when (cards.size) {
+                0 -> "There are no cards with errors."
+                1 -> "The hardest card is \"${cards[0].term}\". You have ${cards[0].errors} errors answering it."
+                else -> "The hardest cards are \"" + cards.joinToString("\", \"") +
+                        "\". You have ${cards[0].errors} errors answering them"
+            }
+        )
     }
 
     private fun resetStats() {
@@ -144,7 +148,7 @@ class FlashCards {
         println("Card statistics have been reset.")
     }
 
-    private fun run() {
+    fun run() {
         while (true) {
             println("Input the action (add, remove, import, export, ask, exit, log, hardest card, reset stats):")
             when (readln()) {
@@ -163,7 +167,20 @@ class FlashCards {
     }
 }
 
-fun main() {
-    FlashCards()
+fun main(args: Array<String>) {
+    val app = FlashCards()
+
+    var exportFilename = ""
+    for (i in args.indices) {
+        when (args[i]) {
+            "-import" -> app.import(args[i + 1])
+            "-export" -> exportFilename = args[i + 1]
+        }
+    }
+
+    app.run()
+
+    if (exportFilename.isNotEmpty()) app.export(exportFilename)
+
     println("Bye bye!")
 }
