@@ -1,146 +1,153 @@
 package flashcards
 
 import java.io.File
-import kotlin.random.Random
 
-class CardBox {
-    private val cards = mutableMapOf<String, String>()
-    private val stats = mutableMapOf<String, Int>()
+data class Card(val term: String, val def: String) {
+    var errors = 0
+
+    override fun toString() = term
+}
+
+class FlashCards {
     private val log = mutableListOf<String>()
+
+    private val deck = mutableListOf<Card>()
+    private operator fun List<Card>.contains(term: String) = any { it.term == term }
+    private infix fun List<Card>.has(def: String) = any { it.def == def }
+
+    private fun println(s: String = "") {
+        log.add(s)
+        kotlin.io.println(s)
+    }
+
+    private fun readln(): String {
+        val s = kotlin.io.readln()
+        log.add(s)
+        return s
+    }
 
     init {
         run()
     }
 
-    private fun getKey(value: String): String = cards.filterValues { it == value }.keys.first()
-
-    private fun <K, V> Map<K, V>.random(): Map.Entry<K, V> = entries.elementAt(Random.nextInt(size))
-
     private fun addCard() {
-        logPrintln("The card:")
-        val term = logReadln()
-        if (term in cards) {
-            logPrintln("The card \"$term\" already exists.")
+        println("The card:")
+        val term = readln()
+        if (term in deck) {
+            println("The card \"$term\" already exists.")
             return
         }
 
-        logPrintln("The definition of the card:")
-        val definition = logReadln()
-        if (definition in cards.values) {
-            logPrintln("The definition \"$definition\" already exists.")
+        println("The definition of the card:")
+        val def = readln()
+        if (deck has def) {
+            println("The definition \"$def\" already exists.")
             return
         }
 
-        cards[term] = definition
-        stats[term] = 0
-        logPrintln("The pair (\"$term\":\"$definition\") has been added.")
+        deck += Card(term, def)
+        println("The pair (\"$term\":\"$def\") has been added.")
     }
 
     private fun removeCard() {
-        logPrintln("Which card?")
-        val term = logReadln()
-        if (term in cards) {
-            cards.remove(term)
-            stats.remove(term)
-            logPrintln("The card has been removed.")
-        } else logPrintln("Can't remove \"$term\": there is no such card.")
-    }
+        println("Which card?")
+        val term = readln()
 
-    private fun takeQuiz() {
-        logPrintln("How many times to ask?")
-        repeat(logReadln().toInt()) {
-            val card = cards.random()
-            logPrintln("Print the definition of \"${card.key}\":")
-            val answer = logReadln()
-            if (card.value != answer) stats[card.key] = stats[card.key]!! + 1
-            logPrintln(
-                when {
-                    card.value == answer -> "Correct!"
-                    answer in cards.values -> "Wrong. The right answer is \"${card.value}\", but your definition is correct for \"${
-                        getKey(
-                            answer
-                        )
-                    }\"."
-                    else -> "Wrong. The right answer is \"${card.value}\"."
-                }
-            )
-        }
+        if (term in deck) {
+            deck.remove(deck.find { it.term == term })
+            println("The card has been removed.")
+        } else println("Can't remove \"$term\": there is no such card.")
     }
 
     private fun import() {
-        logPrintln("File name:")
-        val file = File(logReadln())
+        println("File name:")
+        val file = File(readln())
 
         if (!file.exists()) {
-            logPrintln("File not found.")
+            println("File not found.")
             return
         }
 
-        val lines = file.readLines()
-        lines.forEach {
-            val (key, value, count) = it.split('=')
-            cards[key] = value
-            stats[key] = count.toInt()
+        val cards = file.readLines()
+        cards.forEach {
+            val (term, definition, mistakes) = it.split('=')
+
+            if (term in deck) {
+                deck.remove(deck.find { it.term == term })
+            }
+
+            deck += Card(term, definition).apply {
+                this.errors = mistakes.toInt()
+            }
         }
-        logPrintln("${lines.size} cards have been loaded.")
+        println("${cards.size} cards have been loaded.")
     }
 
     private fun export() {
-        logPrintln("File name:")
-        val filename = logReadln()
+        println("File name:")
+        val filename = readln()
 
         var output = ""
-        cards.entries.forEach {
-            output += it.key + "=" + it.value + "=" + stats[it.key] + "\n"
+        deck.forEach {
+            output += it.term + "=" + it.def + "=" + it.errors + "\n"
         }
 
         File(filename).writeText(output)
-        logPrintln("${cards.size} cards have been saved.")
+        println("${deck.size} cards have been saved.")
     }
 
-    private fun logPrintln(s: String = "") {
-        log.add(s)
-        println(s)
-    }
+    private fun takeQuiz() {
+        println("How many times to ask?")
+        repeat(readln().toInt()) {
+            val card = deck.random()
 
-    private fun logReadln() : String {
-        val s = readln()
-        log.add(s)
-        return s
-    }    
+            println("Print the definition of \"${card.term}\":")
+            val answer = readln()
+
+            if (card.def != answer) card.errors++
+            println(when {
+                card.def == answer -> "Correct!"
+                deck has answer -> "Wrong. The right answer is \"${card.def}\", but your " +
+                        "definition is correct for \"${deck.find { it.def == answer }?.term}\"."
+                else -> "Wrong. The right answer is \"${card.def}\"."
+            })
+        }
+    }
 
     private fun saveLog() {
-        logPrintln("File name:")
-        val filename = logReadln()
+        println("File name:")
+        val filename = readln()
 
         File(filename).writeText(log.joinToString("\n"))
-        logPrintln("The log has been saved.")
+        println("The log has been saved.")
     }
 
-
     private fun showHardestCard() {
-        val terms = stats.filterValues { it > 0 && it == stats.maxByOrNull { it.value }?.value }.keys.toList()
-        logPrintln(
-            when {
-                terms.size == 1 -> "The hardest card is \"${terms[0]}\". You have ${stats[terms[0]]} errors answering it."
-                terms.size > 1 -> "The hardest cards are " + terms.joinToString("\", \"", "\"", "\"") +
-                        ". You have ${stats[terms[0]]} errors answering them"
-                else -> "There are no cards with errors."
-            }
-        )
+        // get the set of cards with the largest amount of errors
+        val terms = deck.groupBy { it.errors }.maxByOrNull { it.key }?.value
+
+        // if the error amount is 0, or we didn't find anything, return an empty list
+            ?.let { if (it[0].errors > 0) it else null } ?: listOf()
+
+        println(when {
+            terms.isEmpty() -> "There are no cards with errors."
+            terms.size == 1 -> "The hardest card is \"${terms[0].term}\". You have ${terms[0].errors} errors answering it."
+            else -> "The hardest cards are \"" + terms.joinToString("\", \"") +
+                    "\". You have ${terms[0].errors} errors answering them"
+        })
     }
 
     private fun resetStats() {
-        for (term in stats) {
-            stats[term.key] = 0
+        for (card in deck) {
+            card.errors = 0
         }
-        logPrintln("Card statistics have been reset.")
+        println("Card statistics have been reset.")
     }
 
     private fun run() {
         while (true) {
-            logPrintln("Input the action (add, remove, import, export, ask, exit, log, hardest card, reset stats):")
-            when (logReadln()) {
+            println("Input the action (add, remove, import, export, ask, exit, log, hardest card, reset stats):")
+            when (readln()) {
                 "add" -> addCard()
                 "remove" -> removeCard()
                 "import" -> import()
@@ -150,14 +157,13 @@ class CardBox {
                 "log" -> saveLog()
                 "hardest card" -> showHardestCard()
                 "reset stats" -> resetStats()
-
             }
-            logPrintln()
+            println()
         }
     }
 }
 
 fun main() {
-    CardBox()
+    FlashCards()
     println("Bye bye!")
 }
